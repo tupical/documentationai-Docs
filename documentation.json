@@ -18,7 +18,12 @@
           {
             "group": "Getting Started",
             "icon": "rocket",
-            "pages": []
+            "pages": [
+              {
+                "title": "README",
+                "path": "index"
+              }
+            ]
           },
           {
             "group": "Core Concepts",
@@ -28,42 +33,14 @@
         ]
       },
       {
-        "tab": "API Reference",
-        "icon": "code",
-        "groups": [
-          {
-            "group": "Endpoints"
-          }
-        ]
-      },
-      {
-        "tab": "Help Center",
-        "icon": "help-circle",
-        "pages": [
-          {
-            "group": "FAQs",
-            "icon": "help-circle",
-            "expandable": false,
-            "pages": []
-          },
-          {
-            "group": "Troubleshooting",
-            "icon": "alert-circle",
-            "expandable": false,
-            "pages": []
-          },
-          {
-            "group": "Guides",
-            "icon": "book-open",
-            "expandable": false,
-            "pages": []
-          }
-        ]
-      },
-      {
         "tab": "Changelog",
         "icon": "clock",
-        "pages": []
+        "pages": [
+          {
+            "title": "Changelog",
+            "path": "Changelog"
+          }
+        ]
       }
     ]
   }
