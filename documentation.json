@@ -1,6 +1,6 @@
 {
   "name": "Артем Войскович",
-  "initialRoute": "introduction",
+  "initialRoute": "index",
   "colors": {
     "light": {
       "brand": "#5f6667"
@@ -26,9 +26,88 @@
             ]
           },
           {
-            "group": "Core Concepts",
-            "icon": "layers",
-            "pages": []
+            "group": "Guides",
+            "icon": "book-open",
+            "pages": [
+              {
+                "title": "Setup",
+                "path": "guides/setup"
+              },
+              {
+                "title": "Celebrations",
+                "path": "guides/celebrations"
+              }
+            ]
+          },
+          {
+            "group": "Features",
+            "icon": "sparkles",
+            "pages": [
+              {
+                "title": "Avatar Animations",
+                "path": "features/avatar-animations"
+              },
+              {
+                "title": "Bugs",
+                "path": "features/bugs"
+              },
+              {
+                "title": "Calendar",
+                "path": "features/calendar"
+              },
+              {
+                "title": "Notifications",
+                "path": "features/notifications"
+              },
+              {
+                "title": "Office Map",
+                "path": "features/office-map"
+              },
+              {
+                "title": "Permissions",
+                "path": "features/permissions"
+              }
+            ]
+          },
+          {
+            "group": "Development",
+            "icon": "code",
+            "pages": [
+              {
+                "title": "Architecture",
+                "path": "development/architecture"
+              },
+              {
+                "title": "Image Optimization",
+                "path": "development/image-optimization"
+              },
+              {
+                "title": "Architecture Refactoring",
+                "path": "ARCHITECTURE_REFACTORING"
+              }
+            ]
+          },
+          {
+            "group": "Infrastructure",
+            "icon": "server",
+            "pages": [
+              {
+                "title": "Cron Jobs",
+                "path": "infrastructure/cron-jobs"
+              },
+              {
+                "title": "Deployment",
+                "path": "infrastructure/deployment"
+              },
+              {
+                "title": "Image Optimization",
+                "path": "infrastructure/image-optimization"
+              },
+              {
+                "title": "Supabase",
+                "path": "infrastructure/supabase"
+              }
+            ]
           }
         ]
       },
