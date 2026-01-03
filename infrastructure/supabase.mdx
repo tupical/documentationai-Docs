@@ -1,0 +1,65 @@
+---
+title: Supabase Infrastructure
+description: >-
+  This document covers advanced Supabase configurations, including Storage,
+  Proxy setup, and RLS policies.
+---
+## Storage (Avatars)
+
+Bucket: `avatars`
+
+**Policies:**
+
+1. **Public Read**: Allow public access to `avatars` bucket.
+
+2. **Authenticated Upload**: Allow users to upload to `uploads/{uid}/*`.
+
+**SQL Setup:**
+
+```sql
+-- Allow authenticated uploads to own folder
+create policy "Users can manage their own avatars"
+  on storage.objects for all to authenticated
+  using ( bucket_id = 'avatars' and (storage.foldername(name))[2] = auth.uid() )
+  with check ( bucket_id = 'avatars' and (storage.foldername(name))[2] = auth.uid() );
+
+-- Public read
+create policy "Public read access"
+  on storage.objects for select to public
+  using ( bucket_id = 'avatars' );
+```
+
+## Nginx Proxy Setup
+
+We use a custom domain `supabase.vskideas.ru` to proxy requests to Supabase. This improves stability on mobile networks and bypasses some regional restrictions.
+
+**Configuration Highlights:**
+
+- Proxies `/auth/v1/`, `/rest/v1/`, `/storage/v1/`, `/realtime/v1/`.
+
+- Handles CORS headers manually (hides Supabase CORS, adds custom).
+
+- Supports WebSocket upgrades for Realtime.
+
+**Client Config:**
+In `src/utils/supabase/client.ts`, the client is initialized with `VITE_SUPABASE_URL`, which should point to the proxy URL in production.
+
+## Row Level Security (RLS)
+
+**Best Practice:**
+Always use helper functions for admin checks in RLS policies to ensure consistency.
+
+- `public.is_admin()`
+
+- `public.is_superadmin()`
+
+**Example:**
+
+```sql
+CREATE POLICY "Admins can delete"
+ON public.table_name
+FOR DELETE
+USING (public.is_admin());
+```
+
+Do **not** query `profiles.role` directly in policies to avoid recursion or performance issues.

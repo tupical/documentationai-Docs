@@ -1,0 +1,311 @@
+---
+title: Deployment Checklist
+description: >-
+  Чеклист для деплоя системы уведомлений с интеграцией Telegram и других
+  компонентов приложения.
+---
+## Критические шаги
+
+### 1. Настройка Cron Job
+
+Cron job требует ручной настройки с реальными учетными данными.
+
+**Следуйте:** [Cron Jobs Setup Guide](./cron-jobs.md#быстрая-настройка)
+
+**Без этого шага автоматические уведомления НЕ будут работать!**
+
+## Чеклист деплоя
+
+### База данных
+
+- Применены все миграции
+
+- Созданы функции очереди уведомлений
+
+- Добавлен `events_enabled` в telegram\_notification\_settings
+
+- Исправлена обработка "застрявших" уведомлений
+
+**Примененные миграции:**
+
+- `20251217000000_add_missing_notification_functions.sql`
+
+- `20251217000001_fix_stuck_notifications.sql`
+
+- `20251217000002_add_events_enabled_to_telegram_settings.sql`
+
+- `20251217000003_fix_notification_cron.sql`
+
+### Edge Functions
+
+- Рефакторинг в модульную архитектуру (9 модулей) для `send-event-notifications`
+
+- Добавлена интеграция Telegram
+
+- Задеплоена в Supabase
+
+- Протестирована успешно
+
+**Статус:** ✅ Deployed and operational
+
+**Расположение:** `supabase/functions/send-event-notifications/`
+
+#### Mini App linking (`telegram-link-from-miniapp`)
+
+- Создана Edge Function `telegram-link-from-miniapp`
+
+- Установлены secrets:
+
+  - `SUPABASE_URL`
+
+  - `SUPABASE_ANON_KEY`
+
+  - `TELEGRAM_BOT_TOKEN`
+
+- Функция задеплоена:\
+  `pnpm supabase functions deploy telegram-link-from-miniapp`
+
+- Протестирован сценарий Mini App:
+
+  1. Открыть Mini App из бота.
+
+  2. Залогиниться/зарегистрироваться по email.
+
+  3. Проверить, что в `profiles` заполнились поля `telegram_user_id`, `telegram_username`, `telegram_linked_at`.
+
+### UI компоненты
+
+- Обновлен компонент TelegramSettings
+
+- Добавлены настройки типов уведомлений
+
+- Добавлен главный переключатель
+
+- Протестировано локально
+
+**Расположение:** `src/components/profile/TelegramSettings.tsx`
+
+### Тестирование
+
+#### Backend Testing
+
+- **Тест Edge Function вручную**
+
+  ```bash
+  powershell -File scripts/test-notifications.ps1
+  ```
+
+  Ожидается: 200 ответ с количеством уведомлений
+
+- **Проверить Cron Job**
+
+  ```sql
+  SELECT * FROM cron.job WHERE jobname = 'process-pending-notifications';
+  ```
+
+  Ожидается: `active = true`
+
+- **Проверить запуски Job**
+
+  ```sql
+  SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;
+  ```
+
+  Ожидается: Недавние запуски с `status = 'succeeded'`
+
+- **Тест очереди уведомлений**
+
+  ```sql
+  -- Создать тестовое уведомление
+  INSERT INTO notification_queue (entity_type, entity_id, user_id, scheduled_for, notification_data)
+  VALUES ('booking', gen_random_uuid(), 'YOUR_USER_ID', NOW() + interval '1 minute', '{"test": true}'::jsonb);
+
+  -- Подождать 2 минуты
+  -- Проверить что обработано
+  SELECT * FROM notification_queue WHERE status = 'sent' ORDER BY updated_at DESC LIMIT 1;
+  ```
+
+#### Frontend Testing
+
+- **Привязать Telegram аккаунт**
+
+  1. Перейти в Profile → Telegram
+
+  2. Открыть @prcs\_corp\_bot
+
+  3. Отправить `/link`
+
+  4. Ввести код верификации
+
+  5. Проверить что появилось "Telegram привязан"
+
+- **Переключить уведомления**
+
+  1. Нажать кнопку "Выключено"
+
+  2. Проверить что изменилось на "Включено"
+
+  3. Проверить что появился раздел типов уведомлений
+
+- **Настроить типы уведомлений**
+
+  1. Переключить каждый checkbox
+
+  2. Нажать "Сохранить настройки"
+
+  3. Обновить страницу
+
+  4. Проверить что настройки сохранились
+
+- **Тест отвязки**
+
+  1. Нажать "Отвязать"
+
+  2. Подтвердить диалог
+
+  3. Проверить что Telegram отвязан
+
+#### End-to-End Testing
+
+- **Уведомление о бронировании**
+
+  1. Создать бронирование на завтра
+
+  2. Установить время уведомления
+
+  3. Подождать запуск cron
+
+  4. Проверить Telegram на наличие сообщения
+
+- **Уведомление о праздновании**
+
+  1. Установить день рождения пользователя на завтра
+
+  2. Подождать следующий запуск cron
+
+  3. Все пользователи должны получить Telegram сообщение (если включено)
+
+## Мониторинг
+
+### Ежедневные проверки (первая неделя)
+
+```sql
+-- Проверить неудачные jobs
+SELECT 
+    status,
+    return_message,
+    start_time
+FROM cron.job_run_details
+WHERE status = 'failed'
+AND start_time > NOW() - interval '24 hours'
+ORDER BY start_time DESC;
+```
+
+### Еженедельные проверки
+
+```sql
+-- Статистика обработки уведомлений
+SELECT 
+    status,
+    COUNT(*) as count
+FROM notification_queue
+WHERE updated_at > NOW() - interval '7 days'
+GROUP BY status;
+```
+
+## План отката
+
+Если возникнут проблемы:
+
+### 1. Отключить Cron Job
+
+```sql
+UPDATE cron.job 
+SET active = false 
+WHERE jobname = 'process-pending-notifications';
+```
+
+### 2. Откатить к старому коду
+
+```bash
+git checkout HEAD~2
+supabase functions deploy send-event-notifications
+```
+
+### 3. Включить Cron Job обратно
+
+```sql
+UPDATE cron.job 
+SET active = true 
+WHERE jobname = 'process-pending-notifications';
+```
+
+## Базовые показатели производительности
+
+Ожидаемая производительность после деплоя:
+
+| Метрика                      | Цель   | Тревога если |
+| ---------------------------- | ------ | ------------ |
+| Cron job success rate        | > 99%  | \< 95%       |
+| Среднее время обработки      | \< 5s  | > 30s        |
+| Процент доставки уведомлений | > 95%  | \< 90%       |
+| Размер очереди               | \< 100 | > 1000       |
+
+## Ресурсы поддержки
+
+### Документация
+
+- [Notifications Feature](../features/notifications.md) - Как работает система
+
+- [Cron Jobs Setup](./cron-jobs.md) - Инструкции по настройке
+
+- [Cron Jobs Monitoring](./cron-jobs.md#мониторинг) - Мониторинг и troubleshooting
+
+### Логи
+
+- **Edge Function**: Supabase Dashboard → Edge Functions → send-event-notifications → Logs
+
+- **Cron Jobs**: Запрос к таблице `cron.job_run_details`
+
+- **Приложение**: Консоль браузера для проблем фронтенда
+
+### Частые проблемы
+
+**Q: Cron job не запускается**\
+A: Проверить активность job, проверить учетные данные, см. cron-jobs.md
+
+**Q: Уведомления не отправляются**\
+A: Проверить логи Edge Function, проверить что в очереди есть pending элементы
+
+**Q: Telegram не работает**\
+A: Проверить что TELEGRAM\_BOT\_TOKEN установлен в Supabase secrets
+
+**Q: Настройки не сохраняются**\
+A: Проверить консоль браузера на ошибки, проверить RLS политики
+
+## Финальная подпись
+
+Перед тем как считать деплой завершенным:
+
+- Все тесты пройдены
+
+- Cron job запущен
+
+- Документация доступна
+
+- Команда обучена новым функциям
+
+- Мониторинг настроен
+
+- План отката понятен
+
+## Следующие шаги после деплоя
+
+1. **Мониторить 48 часов** - Проверить логи и ошибки
+
+2. **Собрать отзывы** - Спросить пользователей о Telegram уведомлениях
+
+3. **Оптимизировать** - Настроить расписание cron если нужно
+
+4. **Расширить** - Добавить больше типов уведомлений по необходимости
+

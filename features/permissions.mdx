@@ -1,0 +1,287 @@
+---
+title: Система прав доступа
+---
+## Обзор
+
+Система прав доступа позволяет гранулярно управлять правами пользователей в корпоративном сервисе. Она включает:
+
+1. **Роль superadmin** - полный доступ ко всем функциям
+
+2. **Гранулярные права** - детальное управление конкретными возможностями
+
+3. **Согласующие** - назначение менеджеров для согласования запросов подчиненных
+
+## Роли пользователей
+
+### Существующие роли в поле `profiles.role`:
+
+- `user` - обычный пользователь (по умолчанию)
+
+- `moderator` - модератор
+
+- `admin` - администратор
+
+- `superadmin` - суперадминистратор (новая роль)
+
+### Назначение роли superadmin
+
+```sql
+-- Назначить superadmin роль пользователю
+UPDATE profiles
+SET role = 'superadmin'
+WHERE email = 'admin@example.com';
+```
+
+## Типы прав доступа
+
+### Согласование запросов:
+
+- `approve_vacation` - Согласование отгулов
+
+- `approve_remote_work` - Согласование удаленной работы
+
+- `approve_sick_leave` - Согласование больничных
+
+### Управление бронированиями:
+
+- `manage_bookings_cars` - Управление бронированиями машин
+
+- `manage_bookings_rooms` - Управление бронированиями переговорок
+
+- `manage_bookings_inventory` - Управление бронированиями инвентаря
+
+### Управление контентом:
+
+- `manage_content_useful` - Редактирование полезного контента
+
+- `manage_content_items` - Редактирование bookableItems
+
+- `manage_content_services` - Редактирование услуг
+
+- `manage_content_events` - Редактирование событий
+
+### Дополнительные права:
+
+- `view_all_bookings` - Просмотр всех бронирований
+
+- `view_all_requests` - Просмотр всех запросов
+
+- `manage_users` - Управление пользователями
+
+## Примеры использования
+
+### 1. Выдать право на редактирование услуг
+
+```sql
+-- Выдать право пользователю
+INSERT INTO user_permissions (user_id, permission_type, granted_by, notes)
+VALUES (
+    'user-uuid-here',
+    'manage_content_services',
+    (SELECT id FROM profiles WHERE user_id = auth.uid()),
+    'Ответственный за управление услугами'
+);
+```
+
+### 2. Назначить согласующего для подчиненного
+
+```sql
+-- Назначить менеджера согласующим для сотрудника
+INSERT INTO user_approvers (user_id, approver_id, permission_scope, notes)
+VALUES (
+    'employee-user-id',
+    'manager-user-id',
+    ARRAY['vacation', 'remote_work', 'sick_leave'],
+    'Непосредственный руководитель'
+);
+```
+
+### 3. Назначить частичные права на согласование
+
+```sql
+-- Согласующий только для отгулов
+INSERT INTO user_approvers (user_id, approver_id, permission_scope)
+VALUES (
+    'employee-user-id',
+    'hr-manager-user-id',
+    ARRAY['vacation']
+);
+```
+
+## Использование в коде
+
+### Проверка прав в TypeScript/JavaScript
+
+```typescript
+import { supabase } from '@/utils/supabase';
+
+// Проверить, является ли пользователь superadmin
+async function isSuperadmin() {
+  const { data, error } = await supabase.rpc('is_superadmin');
+  return data === true;
+}
+
+// Проверить конкретное право
+async function hasPermission(permissionType: string) {
+  const { data, error } = await supabase.rpc('has_permission', {
+    p_permission_type: permissionType
+  });
+  return data === true;
+}
+
+// Проверить, может ли согласовывать запросы пользователя
+async function canApproveForUser(targetUserId: string, requestType?: string) {
+  const { data, error } = await supabase.rpc('can_approve_for_user', {
+    p_target_user_id: targetUserId,
+    p_request_type: requestType
+  });
+  return data === true;
+}
+
+// Получить список пользователей, для которых можно согласовывать
+async function getApprovableUsers(requestType?: string) {
+  const { data, error } = await supabase.rpc('get_approvable_users', {
+    p_request_type: requestType
+  });
+  return data || [];
+}
+```
+
+### Примеры проверок
+
+```typescript
+// Пример 1: Проверка права на редактирование услуг
+const canManageServices = await hasPermission('manage_content_services');
+if (canManageServices) {
+  // Показать форму редактирования
+}
+
+// Пример 2: Получить список подчиненных для согласования отгулов
+const employeesForVacation = await getApprovableUsers('vacation');
+console.log('Могу согласовать отгулы для:', employeesForVacation);
+
+// Пример 3: Проверка права на согласование конкретного запроса
+const canApprove = await canApproveForUser(employeeId, 'remote_work');
+if (canApprove) {
+  // Показать кнопки "Одобрить"/"Отклонить"
+}
+```
+
+## Управление правами через SQL
+
+### Просмотр всех прав пользователя
+
+```sql
+SELECT * FROM v_user_permissions_detailed
+WHERE user_id = 'target-user-id';
+```
+
+### Просмотр всех согласующих для пользователя
+
+```sql
+SELECT * FROM v_user_approvers_detailed
+WHERE user_id = 'target-user-id';
+```
+
+### Удалить право
+
+```sql
+DELETE FROM user_permissions
+WHERE user_id = 'user-id' AND permission_type = 'manage_content_events';
+```
+
+### Удалить согласующего
+
+```sql
+DELETE FROM user_approvers
+WHERE user_id = 'employee-id' AND approver_id = 'manager-id';
+```
+
+## Row Level Security (RLS)
+
+Система автоматически защищает данные:
+
+- **user\_permissions**: Пользователи видят только свои права. Superadmin видит и управляет всеми.
+
+- **user\_approvers**: Пользователи видят своих согласующих и тех, для кого они согласующие. Superadmin видит всех.
+
+- **vacation\_periods, remote\_work\_periods, sick\_leave\_periods**: Обновлены политики для проверки прав через `can_approve_for_user()`.
+
+## Рекомендации по использованию
+
+### 1. Назначение superadmin
+
+- Назначайте роль superadmin минимальному количеству доверенных лиц
+
+- Superadmin имеет неограниченный доступ ко всем функциям
+
+### 2. Гранулярные права
+
+- Используйте для делегирования конкретных задач (например, управление контентом)
+
+- Выдавайте только необходимые права
+
+### 3. Согласующие
+
+- Назначайте согласующих по организационной структуре
+
+- Можно назначить нескольких согласующих с разными областями (vacation, remote\_work, sick\_leave)
+
+- HR может быть согласующим для отгулов, а непосредственный менеджер - для удаленной работы
+
+### 4. Аудит
+
+- Используйте поля `granted_by`, `assigned_by` для отслеживания, кто выдал права
+
+- Поле `notes` позволяет документировать причины выдачи прав
+
+## Админские отчёты и согласования
+
+- Во вкладке `/admin/approvals` добавлена секция «Согласовано», где отображаются будущие подтверждённые бронирования, записи на услуги и HR-запросы. Это помогает видеть, что уже прошло модерацию, без переключения в другие разделы.
+
+- Новая вкладка `/admin/reports` позволяет строить историю бронирований по произвольному диапазону дат с фильтрами по пользователю и ресурсу. Доступен быстрый выбор диапазона (7/30 дней), ручной выбор дат, экспорт текущего набора данных в CSV и основные KPI (количество, уникальные пользователи, суммарная длительность).
+
+- Для доступа к отчётам и вкладке «Согласовано» по-прежнему нужны права администратора (роль `admin` или `superadmin`).
+
+## Миграция
+
+Миграция находится в файле:
+
+```
+supabase/migrations/20251028000000_create_permissions_system.sql
+```
+
+Для применения:
+
+```bash
+supabase db push
+```
+
+Для обновления TypeScript типов после изменений в БД:
+
+```bash
+supabase gen types typescript --project-id your-project-id > src/shared/types/database.ts
+```
+
+## Troubleshooting
+
+### Ошибка: "permission denied for function"
+
+- Убедитесь, что функции созданы с `SECURITY DEFINER`
+
+- Проверьте, что RLS политики настроены правильно
+
+### Пользователь не может согласовать запрос
+
+- Проверьте наличие записи в `user_approvers`
+
+- Убедитесь, что `permission_scope` включает нужный тип запроса
+
+- Superadmin может согласовывать всё автоматически
+
+### Права не работают
+
+- Проверьте, выданы ли права в таблице `user_permissions`
+
+- Убедитесь, что пользователь авторизован (`auth.uid()` возвращает ID)
+

@@ -1,0 +1,45 @@
+---
+title: Image Optimization (Imagick + HEIC)
+description: >-
+  Instructions for setting up Imagick with HEIC/HEIF support on the server side
+  (for avatar processing).
+---
+## Ubuntu/Debian Setup
+
+1. **Install Dependencies:**
+
+   ```bash
+   sudo apt update
+   sudo apt install -y libheif1 libheif-dev imagemagick libmagickwand-dev
+   ```
+
+2. **Install PHP Extension:**
+
+   ```bash
+   sudo apt install -y php-imagick
+   # Or via PECL
+   sudo pecl install imagick
+   ```
+
+3. **Enable HEIC in ImageMagick Policy:**
+   Edit `/etc/ImageMagick-6/policy.xml`:
+   Change rights from `none` to `read|write` for patterns `HEIC` and `HEIF`.
+
+4. **Verify:**
+
+   ```bash
+   php -r 'echo extension_loaded("imagick")?"imagick ok\n":"no imagick\n";'
+   ```
+
+## Docker (Alpine)
+
+```dockerfile
+RUN apk add --no-cache imagemagick imagemagick-dev libheif libheif-dev \
+    php81-dev php81-pear gcc g++ make autoconf
+RUN yes | pecl install imagick \
+ && echo "extension=imagick" > /etc/php81/conf.d/50_imagick.ini
+```
+
+## Usage
+
+The backend (PHP scripts) uses Imagick to convert uploaded HEIC images to JPEG/PNG for wider browser compatibility.

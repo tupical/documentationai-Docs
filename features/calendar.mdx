@@ -1,0 +1,264 @@
+---
+title: Интеграция с календарями
+description: >-
+  Компоненты для добавления событий в календарь пользователя на Android и iOS
+  устройствах.
+---
+## Возможности
+
+- ✅ **Web Share API** - нативная интеграция с календарями на Android и iOS 15+
+
+- ✅ **Fallback** - автоматическое скачивание .ics файла на неподдерживаемых устройствах
+
+- ✅ **Простое использование** - готовые компоненты и утилиты
+
+- ✅ **Типизация** - полная поддержка TypeScript
+
+## Компоненты
+
+### AddToCalendarButton
+
+Универсальная кнопка для добавления события в календарь.
+
+```tsx
+import { AddToCalendarButton } from '@/components/calendar';
+
+<AddToCalendarButton
+  event={{
+    id: 'unique-id',
+    title: 'Встреча',
+    description: 'Описание события',
+    location: 'Офис',
+    startTime: new Date('2025-10-19T10:00:00'),
+    endTime: new Date('2025-10-19T11:00:00')
+  }}
+  variant="default"
+  size="lg"
+  onSuccess={() => console.log('Добавлено')}
+  onError={(error) => console.error(error)}
+/>
+```
+
+### BookingSuccessDialog
+
+Диалог успешного бронирования с предложением добавить в календарь.
+
+```tsx
+import { BookingSuccessDialog } from '@/components/calendar';
+import { useState } from 'react';
+
+const [showSuccess, setShowSuccess] = useState(false);
+const [booking, setBooking] = useState<Booking | null>(null);
+
+// После успешного бронирования
+const handleBookingSuccess = (newBooking: Booking) => {
+  setBooking(newBooking);
+  setShowSuccess(true);
+};
+
+return (
+  <BookingSuccessDialog
+    open={showSuccess}
+    onClose={() => setShowSuccess(false)}
+    booking={booking!}
+  />
+);
+```
+
+### AppointmentSuccessDialog
+
+Диалог успешной записи на услугу.
+
+```tsx
+import { AppointmentSuccessDialog } from '@/components/calendar';
+
+<AppointmentSuccessDialog
+  open={showSuccess}
+  onClose={() => setShowSuccess(false)}
+  appointment={appointment}
+  serviceName="Консультация"
+/>
+```
+
+## Утилиты
+
+### calendar.ts
+
+Основные функции для работы с календарем.
+
+```tsx
+import { addToCalendar, isCalendarShareSupported } from '@/utils/calendar';
+
+// Проверка поддержки Web Share API
+if (isCalendarShareSupported()) {
+  console.log('Web Share поддерживается');
+}
+
+// Добавление события
+await addToCalendar({
+  id: 'event-1',
+  title: 'Встреча',
+  startTime: new Date(),
+  endTime: new Date(Date.now() + 3600000)
+});
+```
+
+### calendarHelpers.ts
+
+Хелперы для конвертации бронирований в события календаря.
+
+```tsx
+import { bookingToCalendarEvent, appointmentToCalendarEvent } from '@/utils/calendarHelpers';
+
+// Конвертация бронирования
+const calendarEvent = bookingToCalendarEvent(booking);
+
+// Конвертация встречи
+const calendarEvent = appointmentToCalendarEvent(appointment, 'Название услуги');
+```
+
+## Примеры интеграции
+
+### В форме бронирования автомобиля
+
+```tsx
+import { useState } from 'react';
+import { BookingSuccessDialog } from '@/components/calendar';
+import { createBooking } from '@/api/bookings';
+
+function CarBookingForm() {
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [booking, setBooking] = useState<Booking | null>(null);
+
+  const handleBook = async (carId: string) => {
+    const newBooking = await createBooking({
+      item_id: carId,
+      start_time: selectedStartTime,
+      end_time: selectedEndTime
+    });
+
+    setBooking(newBooking);
+    setShowSuccess(true);
+  };
+
+  return (
+    <>
+      {/* Форма бронирования */}
+      <Button onClick={() => handleBook(selectedCar)}>
+        Забронировать
+      </Button>
+
+      {/* Диалог успеха */}
+      <BookingSuccessDialog
+        open={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        booking={booking!}
+      />
+    </>
+  );
+}
+```
+
+### В форме записи на услугу
+
+```tsx
+import { AppointmentSuccessDialog } from '@/components/calendar';
+
+function ServiceBookingForm() {
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [appointment, setAppointment] = useState<Appointment | null>(null);
+
+  const handleBookAppointment = async () => {
+    const newAppointment = await createAppointment({
+      service_id: selectedService.id,
+      appointment_time: selectedDateTime
+    });
+
+    setAppointment(newAppointment);
+    setShowSuccess(true);
+  };
+
+  return (
+    <>
+      <Button onClick={handleBookAppointment}>
+        Записаться
+      </Button>
+
+      <AppointmentSuccessDialog
+        open={showSuccess}
+        onClose={() => setShowSuccess(false)}
+        appointment={appointment!}
+        serviceName={selectedService.name}
+      />
+    </>
+  );
+}
+```
+
+### Кастомное использование
+
+```tsx
+import { AddToCalendarButton } from '@/components/calendar';
+
+function MyBookingCard({ booking }: { booking: Booking }) {
+  return (
+    <div className="card">
+      <h3>{booking.item_name}</h3>
+      <p>{new Date(booking.start_time).toLocaleString()}</p>
+
+      <AddToCalendarButton
+        event={{
+          id: booking.id,
+          title: `Бронирование: ${booking.item_name}`,
+          startTime: new Date(booking.start_time),
+          endTime: new Date(booking.end_time)
+        }}
+        variant="outline"
+      >
+        Добавить напоминание
+      </AddToCalendarButton>
+    </div>
+  );
+}
+```
+
+## Как это работает
+
+### Android
+
+На Android устройствах Web Share API позволяет пользователю выбрать любое приложение календаря (Google Calendar, Outlook, Samsung Calendar и т.д.) для добавления события.
+
+### iOS
+
+На iOS 15+ поддерживается Web Share API с .ics файлами, что позволяет добавлять события в Apple Calendar или другие установленные приложения.
+
+### Desktop / неподдерживаемые устройства
+
+На устройствах без Web Share API автоматически скачивается .ics файл, который пользователь может открыть в любом календарном приложении.
+
+## Формат .ics
+
+Генерируемые .ics файлы соответствуют стандарту iCalendar (RFC 5545) и содержат:
+
+- Уникальный ID события
+
+- Название и описание
+
+- Время начала и окончания
+
+- Местоположение (если указано)
+
+- Статус события (CONFIRMED)
+
+## Рекомендации
+
+1. **Показывайте кнопку после успешного действия** - используйте диалоги успеха
+
+2. **Не навязывайте** - сделайте добавление в календарь опциональным
+
+3. **Используйте осмысленные названия** - укажите что именно бронируется
+
+4. **Добавляйте контекст в описание** - статус, цель, заметки
+
+5. **Комбинируйте с push-уведомлениями** - календарь + напоминания = отличный UX
+

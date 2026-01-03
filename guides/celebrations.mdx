@@ -1,0 +1,59 @@
+---
+title: Celebrations Guide
+---
+## Overview
+
+The system automatically notifies users about:
+
+- **Birthdays** (Today and Reminder for tomorrow)
+
+- **Work Anniversaries** (Today and Reminder for tomorrow)
+
+## Architecture
+
+1. **Service**: `src/services/celebrationService.ts` (`processCelebrations`)
+
+   - Scans `profiles` for matching dates.
+
+   - Generates notification payloads.
+
+   - Inserts into `notification_queue`.
+
+2. **Trigger**:
+
+   - Ideally triggered via a Cron Job (External or Internal) calling an endpoint.
+
+   - Can be triggered manually via Admin Panel.
+
+3. **Delivery**:
+
+   - Standard `process-pending-notifications` job picks them up and broadcasts via Pusher/Telegram.
+
+## Setup
+
+### Automated Trigger
+
+Since `processCelebrations` logic resides in the application layer (Node/TS), it should be called via an HTTP endpoint or a script, not directly from `pg_cron` (unless using an Edge Function for the logic).
+
+Currently, we recommend using an external cron (e.g., GitHub Actions) to hit a secure API endpoint, or relying on the Admin manual trigger until an Edge Function port is complete.
+
+## Notification Types
+
+- `birthday`
+
+- `birthday_reminder`
+
+- `work_anniversary`
+
+- `work_anniversary_reminder`
+
+## Manual Trigger
+
+Use the `useCelebrations` hook in the Admin UI:
+
+```typescript
+const { runCelebrations } = useCelebrations();
+// ...
+<button onClick={runCelebrations}>Run Celebrations</button>
+```
+

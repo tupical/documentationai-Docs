@@ -1,0 +1,120 @@
+---
+title: Setup Guide
+description: >-
+  This guide covers the setup of the development environment, including
+  Supabase, Docker, and local dependencies.
+---
+## Prerequisites
+
+- **Docker Desktop 4.31+** – Required for local Supabase instances (Postgres, Studio, Storage, etc.).
+
+- **Node.js ≥ 22.12** and **pnpm** – Used for running the frontend and Supabase CLI.
+
+- **Supabase CLI 2.48.3** – Included in project dev dependencies. Run via `pnpm supabase <command>`.
+
+- **Access to Secrets** – You will need the Supabase anon/service keys, Pusher Beams keys, and OAuth secrets.
+
+## Environment Variables
+
+Create a `.env.local` file in the root and `supabase/.env.local` for Edge Functions.
+
+### Root `.env.local`
+
+| Key                                              | Description                                                |
+| ------------------------------------------------ | ---------------------------------------------------------- |
+| `VITE_SUPABASE_URL`                              | Supabase API URL. For local dev: `http://127.0.0.1:54321`. |
+| `VITE_SUPABASE_ANON_KEY`                         | Public anon key. Get from `pnpm supabase status`.          |
+| `VITE_PUSHER_INSTANCE_ID`, `VITE_PUSHER_APP_KEY` | Pusher Beams keys for push notifications.                  |
+| `VITE_APP_BASE_URL`                              | Frontend base URL (for deep links).                        |
+
+### `supabase/.env.local`
+
+| Key                                       | Description                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`                            | Project URL. Local: `http://127.0.0.1:54321`.                                         |
+| `SUPABASE_ANON_KEY`                       | Public key (for function tests).                                                      |
+| `SUPABASE_SERVICE_ROLE_KEY`               | Service role key (needed for `send-event-notifications` & `signup`). **Keep secret.** |
+| `APP_BASE_URL`                            | Frontend URL for email links.                                                         |
+| `PUSHER_INSTANCE_ID`, `PUSHER_SECRET_KEY` | Pusher Beams secrets for backend.                                                     |
+| `TELEGRAM_BOT_TOKEN`                      | Telegram Bot Token for notifications.                                                 |
+
+## Local Supabase Setup
+
+1. **Install dependencies:**
+
+   ```bash
+   pnpm install
+   ```
+
+2. **Login to Supabase (once):**
+
+   ```bash
+   pnpm supabase login
+   ```
+
+3. **Link Project:**
+
+   ```bash
+   pnpm supabase link --project-ref jkrshlfrqmoejavlvcuv
+   ```
+
+4. **Start Local Infrastructure:**
+
+   ```bash
+   pnpm supabase start
+   ```
+
+   This will output your local API URL and keys.
+
+5. **Reset Database:**
+
+   ```bash
+   pnpm supabase db reset
+   ```
+
+   This applies all migrations from `supabase/migrations`.
+
+## Frontend Setup
+
+1. Configure `.env.local` with the keys from the previous step.
+
+2. Start the dev server:
+
+   ```bash
+   pnpm dev
+   ```
+
+## Working with Migrations
+
+- **Create Migration:** `pnpm supabase migration new <name>`
+
+- **Apply Locally:** `pnpm supabase db push`
+
+- **Diff:** `pnpm supabase db diff --linked`
+
+- **Pull Remote:** `pnpm supabase db pull`
+
+## Edge Functions
+
+Functions: `send-event-notifications`, `signup`.
+
+- **Serve Locally:**
+
+  ```bash
+  pnpm supabase functions serve send-event-notifications --env-file supabase/.env.local
+  ```
+
+- **Deploy:**
+
+  ```bash
+  pnpm supabase functions deploy send-event-notifications
+  ```
+
+## Common Issues
+
+- **Ports in use:** Run `pnpm supabase stop`.
+
+- **Missing keys:** Check `.env.local` and run `pnpm supabase status`.
+
+- **Deploy auth error:** Re-run `pnpm supabase login`.
+

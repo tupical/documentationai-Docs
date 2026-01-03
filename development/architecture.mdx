@@ -1,0 +1,289 @@
+---
+title: Архитектура приложения
+description: >-
+  Документ описывает архитектурные решения, рефакторинг и общую структуру
+  приложения.
+---
+## Рефакторинг: WebSocket вместо Polling
+
+### Обзор изменений
+
+Рефакторинг архитектуры приложения с переходом от polling на WebSocket и оптимизацией Service Worker.
+
+### 1. Переход на WebSocket (Supabase Realtime)
+
+#### До рефакторинга
+
+- **Polling каждые 5 минут** для проверки статусов appointments (`appointmentStatusUpdater.ts`)
+
+- **Polling каждую минуту** для проверки валидности сессии (`ProtectedRoute.tsx`)
+
+- Высокая нагрузка на сервер и неэффективное использование ресурсов
+
+- Задержки в обновлении данных до 5 минут
+
+#### После рефакторинга
+
+- **WebSocket через Supabase Realtime** для мгновенных обновлений appointments
+
+- Встроенный `onAuthStateChange` без дополнительного polling
+
+- Значительное снижение нагрузки на сервер
+
+- Мгновенные обновления в реальном времени
+
+#### Новые компоненты
+
+**`useAppointmentRealtime`****\*\*\*\* Hook**
+
+```typescript
+import { useAppointmentRealtime } from '@/hooks/useAppointmentRealtime';
+
+// Использование в компоненте
+useAppointmentRealtime({
+  onAppointmentUpdate: (payload) => {
+    console.log('Appointment updated:', payload);
+  },
+  onAppointmentInsert: (payload) => {
+    console.log('New appointment:', payload);
+  },
+  onAppointmentDelete: (payload) => {
+    console.log('Appointment deleted:', payload);
+  },
+  enabled: true
+});
+```
+
+**Преимущества:**
+
+- Реакция на изменения в реальном времени
+
+- Автоматическое управление подписками (subscribe/unsubscribe)
+
+- Минимальное потребление ресурсов
+
+- Поддержка всех CRUD операций (INSERT, UPDATE, DELETE)
+
+### 2. Оптимизация Service Worker
+
+#### До рефакторинга
+
+- Простое кеширование без стратегий
+
+- Один общий кеш для всех типов ресурсов
+
+- Отсутствие очистки старых кешей
+
+- Неоптимальная обработка разных типов контента
+
+#### После рефакторинга
+
+**Множественные кеш-стратегии:**
+
+1. **Images (Cache First)**
+
+   - Приоритет кеша для быстрой загрузки
+
+   - Фоновое обновление из сети
+
+   - Отдельный кеш `images-v2`
+
+2. **Static Assets (Stale-While-Revalidate)**
+
+   - JS, CSS, шрифты
+
+   - Мгновенный ответ из кеша
+
+   - Обновление в фоне
+
+   - Кеш `static-v2`
+
+3. **HTML Pages (Network First)**
+
+   - Приоритет актуальности данных
+
+   - Fallback на кеш при offline
+
+   - Кеш `dynamic-v2`
+
+4. **API Calls (Network Only)**
+
+   - Всегда актуальные данные
+
+   - Не кешируются
+
+**Версионирование кешей:**
+
+```javascript
+const CACHE_VERSION = 'v2';
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
+const IMAGE_CACHE = `images-${CACHE_VERSION}`;
+```
+
+**Автоматическая очистка:**
+
+- Удаление старых версий кешей при активации
+
+- Предотвращение утечек памяти
+
+### 3. Улучшения ProtectedRoute
+
+#### Изменения
+
+- **Удален** избыточный polling сессии (каждую минуту)
+
+- **Оставлен** только `onAuthStateChange` который эффективно отслеживает:
+
+  - Вход/выход пользователя
+
+  - Обновление токенов
+
+  - Истечение сессии
+
+  - Обновление данных пользователя
+
+#### Преимущества
+
+- Снижение нагрузки на Supabase
+
+- Более быстрая реакция на изменения состояния
+
+- Встроенная в SDK оптимизация
+
+### 4. Обновление AppLayout
+
+#### До
+
+```typescript
+useEffect(() => {
+  const stopChecker = startAppointmentStatusChecker(5);
+  return () => stopChecker();
+}, []);
+```
+
+#### После
+
+```typescript
+useAppointmentRealtime({
+  onAppointmentUpdate: async (payload) => {
+    await updateCompletedAppointments();
+  },
+  onAppointmentInsert: async (payload) => {
+    await updateCompletedAppointments();
+  },
+  enabled: true
+});
+```
+
+### 5. Обратная совместимость
+
+Функция `startAppointmentStatusChecker` помечена как `@deprecated`, но оставлена для обратной совместимости:
+
+```typescript
+/**
+ * @deprecated Use useAppointmentRealtime hook instead for real-time WebSocket updates
+ */
+export function startAppointmentStatusChecker(intervalMinutes: number = 5): () => void {
+  console.warn('startAppointmentStatusChecker is deprecated...');
+  // ... код
+}
+```
+
+## Метрики производительности
+
+### Снижение нагрузки на сервер
+
+- **Appointments polling**: с 12 запросов/час → 0 запросов (WebSocket)
+
+- **Session polling**: с 60 запросов/час → 0 запросов (onAuthStateChange)
+
+- **Общее снижение**: \~72 HTTP запроса/час на пользователя
+
+### Улучшение отзывчивости
+
+- Обновление appointments: с задержкой до 5 минут → мгновенно
+
+- Обработка изменений сессии: с задержкой до 1 минуты → мгновенно
+
+### Кеширование
+
+- Быстрая загрузка статичных ресурсов
+
+- Работа offline для закешированных страниц
+
+- Автоматическое обновление в фоне
+
+## Миграция для разработчиков
+
+### Если вы использовали `startAppointmentStatusChecker`
+
+**Старый код:**
+
+```typescript
+useEffect(() => {
+  const stop = startAppointmentStatusChecker(5);
+  return () => stop();
+}, []);
+```
+
+**Новый код:**
+
+```typescript
+import { useAppointmentRealtime } from '@/hooks/useAppointmentRealtime';
+
+useAppointmentRealtime({
+  onAppointmentUpdate: (payload) => {
+    // Ваша логика
+  },
+  enabled: true
+});
+```
+
+### Если вы использовали polling для других данных
+
+Используйте Supabase Realtime API напрямую:
+
+```typescript
+const channel = supabase
+  .channel('my-channel')
+  .on('postgres_changes', {
+    event: '*',
+    schema: 'public',
+    table: 'my_table'
+  }, (payload) => {
+    console.log('Change received!', payload);
+  })
+  .subscribe();
+```
+
+## Рекомендации
+
+1. **Всегда используйте WebSocket** для данных, которые могут изменяться
+
+2. **Избегайте polling**, если есть альтернатива через Realtime
+
+3. **Используйте правильную стратегию кеширования** в зависимости от типа контента
+
+4. **Версионируйте кеши** для корректной инвалидации при обновлениях
+
+## Дальнейшие улучшения
+
+- Добавить метрики использования WebSocket
+
+- Реализовать автоматический reconnect при потере соединения
+
+- Добавить индикатор online/offline статуса
+
+- Расширить realtime на другие таблицы (services, departments)
+
+- Добавить background sync для offline операций
+
+## Связанная документация
+
+- [Supabase Setup](../infrastructure/supabase.md) - Настройка Supabase Realtime
+
+- [Notifications Feature](../features/notifications.md) - Система уведомлений
+
+- [Liquid Glass](../development/liquid-glass.md) - UI эффекты
+

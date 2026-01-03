@@ -1,0 +1,190 @@
+---
+title: Office Map Feature
+description: >-
+  The interactive office map allows users to view the floor plan, find
+  colleagues, and navigate the office space.
+---
+**Key Features:**
+
+- Scalable SVG maps (Figma/draw\.io exported).
+
+- Complex room shapes and partitions.
+
+- Different zone types (Workspace, Meeting Room, Kitchen, etc.).
+
+- Interactive desks with user assignment.
+
+- Zoom and Pan support.
+
+## 3D карта (Three.js)
+
+Данные 3D карты хранятся в базе данных Supabase:
+
+- `office3d_floors` — этажи (slug, name, metadata с customWalls и doors)
+
+- `office3d_rooms` — комнаты с bounds (x, z, width, depth) и типом (meeting, office, common)
+
+- `office3d_desks` — рабочие столы с position, rotation, equipment
+
+- `office3d_seat_assignments` — привязка столов к профилям сотрудников
+
+**Архитектура:**
+
+- Хук `useOffice3DFloorData(floorSlug)` загружает данные этажа из view `v_office3d_map_snapshot`
+
+- Утилита `src/components/office-map-3d/Scene/geometryUtils.ts` автоматически строит стены из boundaries комнат
+
+- Компонент `Wall` скрывает только ту сторону стены, которая относится к комнате, расположенной ближе к камере (вид «как в Sims 3»)
+
+- Проходы описываются в `doors` (хранятся в metadata этажа): координаты отрезка вдоль стены, генератор автоматически «вырежет» этот участок
+
+**Типы:** `src/shared/types/office3d.ts`
+
+### 3D Аватары (Ready Player Me)
+
+Интеграция Ready Player Me позволяет пользователям создавать персонализированные 3D аватары для отображения на карте офиса.
+
+**Компоненты:**
+
+- `src/components/profile/ReadyPlayerMeWidget.tsx` — iframe-виджет для создания аватара
+
+- `src/components/profile/AvatarPreview3D.tsx` — предпросмотр аватара в 3D
+
+- `src/components/profile/AvatarModel.tsx` — загрузка и отображение GLB модели
+
+- `src/components/office-map-3d/Player/Character.tsx` — отображение аватара в режиме персонажа
+
+**Как работает:**
+
+1. Пользователь открывает настройки профиля (вкладка "Настройки")
+
+2. Нажимает "Создать 3D аватар" или "Изменить 3D аватар"
+
+3. Открывается iframe с редактором Ready Player Me (`https://corporate-3d-map.readyplayer.me/avatar?frameApi`)
+
+4. После создания аватара виджет получает событие `v1.avatar.exported` через postMessage API
+
+5. URL аватара (GLB модель) сохраняется в `profiles.rpm_avatar_url` через `updateProfile`
+
+6. При входе на карту в режиме персонажа (`mode=character`) аватар загружается из `profile.rpm_avatar_url`
+
+7. Модель масштабируется до высоты \~1.7м и центрируется
+
+**Разделение полей:**
+
+- `profiles.avatar_url` — обычное фото профиля (2D изображение)
+
+- `profiles.rpm_avatar_url` — 3D аватар Ready Player Me (GLB модель)
+
+**Требования:**
+
+- Iframe должен иметь доступ к `readyplayer.me` (проверьте CSP политики)
+
+- GLB модели загружаются через HTTPS, убедитесь в доступности URL
+
+- Для предпросмотра используется `@react-three/fiber` и `@react-three/drei`
+
+**Fallback:** Если у пользователя нет аватара, отображается простая капсула серого цвета.
+
+### Режим визуального редактора (суперадмин)
+
+- Переключатель в `UIOverlay` доступен только для `superadmin`; режимы: `view` и `edit`.
+
+- Подсветка при наведении включается только в режиме `edit` (комнаты/столы подсвечиваются оранжевым).
+
+- Клик по объекту в `edit` открывает `ObjectEditorDialog`:
+
+  - Стол: код, позиция (x,y,z), поворот, оборудование (мониторы, регулировка стола, ОС, CPU, GPU, RAM). Сохранение через Supabase `office3d_desks`.
+
+  - Комната: имя, тип, bounds (x,z,width,depth). Сохранение через Supabase `office3d_rooms`.
+
+  - Двери/стены пока только в режиме просмотра (не сохраняются).
+
+- После сохранения вызывается `refetchFloorData`, сцена обновляется без перезагрузки страницы.
+
+- Доступ к кнопке редактора и сохранения — только если `isSuperadmin(profile)`; для остальных UI остаётся режим просмотра.
+
+## Architecture
+
+1. **SVG Asset**: Stored in `public/maps/floor-X.svg`. Contains the visual layout.
+
+2. **Database**:
+
+   - `office_floors`: Metadata about the floor (level, building, SVG path).
+
+   - `office_zones`: Logical areas linked to SVG elements.
+
+   - `office_desks`: Specific coordinates for desks.
+
+   - `office_seat_assignments`: Links users to desks.
+
+3. **Frontend**: `MapViewport` component handles rendering and interaction.
+
+## Setup Guide
+
+### 1. Create the SVG
+
+1. Use Figma or draw\.io.
+
+2. Draw walls, rooms, and furniture.
+
+3. Export as SVG to `public/maps/`.
+
+### 2. Prepare Data (JSON)
+
+Use `docs/floor-template.json` as a base.
+
+```json
+{
+  "floor": {
+    "slug": "hq-floor-1",
+    "name": "HQ Floor 1",
+    "mapSvgPath": "/maps/floor-1.svg",
+    "viewport": { "width": 1200, "height": 800 }
+  },
+  "zones": [
+    {
+      "name": "Open Space",
+      "type": "department",
+      "roomType": "workspace",
+      "svgElementId": "zone-open-space",
+      "color": "#2563EB"
+    }
+  ],
+  "desks": [
+    {
+      "code": "D-001",
+      "zone": "Open Space",
+      "position": { "x": 100, "y": 200 },
+      "rotation": 0
+    }
+  ]
+}
+```
+
+### 3. Import Data
+
+Run the import script:
+
+```bash
+npm run office-map:import my-floor.json
+```
+
+Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+
+## Coordinate System
+
+- **Origin**: Top-left (0,0).
+
+- **Desk Position**: Center of the desk marker (48px circle).
+
+- **Rotation**: 0° (Up), 90° (Right), 180° (Down), 270° (Left).
+
+## Troubleshooting
+
+- **Map not loading**: Check `mapSvgPath` in DB matches file in `public/maps/`.
+
+- **Desks missing**: Check `floor_id` linkage in `office_desks`.
+
+- **Import fails**: Ensure Zone names in JSON match existing zones or are unique.
+

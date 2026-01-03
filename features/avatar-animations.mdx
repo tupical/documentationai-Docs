@@ -1,0 +1,191 @@
+---
+title: Анимации 3D аватаров
+description: >-
+  Проект поддерживает работу с 3D аватарами Ready Player Me на карте офиса.
+  Аватары могут иметь различные позы и анимации.
+---
+## Текущая реализация
+
+### Компоненты
+
+- `src/components/office-map-3d/Scene/RpmAvatar.tsx` - основной компонент аватара
+
+- `src/utils/avatarPoses.ts` - утилиты для работы с позами и анимациями
+
+### Как это работает
+
+1. Аватар загружается с серверов Ready Player Me
+
+2. Применяется масштабирование и позиционирование
+
+3. Если доступна анимация сидячей позы — она применяется
+
+4. Аватар поворачивается на 180° лицом к столу
+
+## Добавление сидячей позы
+
+### Рекомендуемый способ: Mixamo анимация
+
+**Шаг 1: Скачайте анимацию**
+
+1. Перейдите на [https://www.mixamo.com](https://www.mixamo.com)
+
+2. Войдите с Adobe ID (бесплатно)
+
+3. Загрузите любую модель или используйте Y Bot
+
+4. Найдите анимацию "Sitting Idle"
+
+5. Скачайте:
+
+   - Format: FBX Binary
+
+   - Skin: Without Skin
+
+   - FPS: 30
+
+**Шаг 2: Конвертируйте в GLB**
+
+Онлайн: [https://products.aspose.app/3d/conversion/fbx-to-glb](https://products.aspose.app/3d/conversion/fbx-to-glb)
+
+Или через Blender:
+
+```
+File → Import → FBX
+File → Export → glTF 2.0 (.glb)
+```
+
+**Шаг 3: Разместите файл**
+
+```
+public/animations/sitting.glb
+```
+
+**Шаг 4: Готово!**
+
+Компонент автоматически обнаружит и применит анимацию.
+
+## API компонента RpmAvatar
+
+```tsx
+interface RpmAvatarProps {
+  url: string;                    // URL модели Ready Player Me
+  sittingAnimationUrl?: string;   // Опциональный путь к анимации
+}
+```
+
+### Пример использования
+
+```tsx
+<RpmAvatar 
+  url="https://models.readyplayer.me/abc123.glb"
+  sittingAnimationUrl="/animations/sitting.glb"
+/>
+```
+
+## Утилиты
+
+### avatarPoses.ts
+
+```typescript
+// Найти кость по имени
+findBone(skeleton, ['hips', 'pelvis'])
+
+// Получить все имена костей (для отладки)
+getBoneNames(skeleton)
+
+// Получить скелет из сцены
+getSkeletonFromScene(scene)
+
+// Воспроизвести анимацию
+playAnimation(mixer, animations, 'sitting')
+
+// Проверить наличие файла анимации
+await checkAnimationExists('/animations/sitting.glb')
+```
+
+### Константы путей анимаций
+
+```typescript
+import { ANIMATION_PATHS } from '@/utils/avatarPoses';
+
+ANIMATION_PATHS.sitting      // '/animations/sitting.glb'
+ANIMATION_PATHS.sittingIdle  // '/animations/sitting-idle.glb'
+ANIMATION_PATHS.walking      // '/animations/walking.glb'
+ANIMATION_PATHS.idle         // '/animations/idle.glb'
+```
+
+## Отладка
+
+### Проверка в консоли
+
+При загрузке аватара выводятся логи:
+
+```
+[RpmAvatar] Available bones: ['Hips', 'Spine', ...]
+[RpmAvatar] Available animations: ['sitting']
+[RpmAvatar] Playing animation: sitting
+```
+
+### Если анимация не применяется
+
+1. Проверьте путь к файлу: `public/animations/sitting.glb`
+
+2. Проверьте консоль на наличие сообщения "Sitting animation found"
+
+3. Убедитесь, что файл в формате GLB (не FBX)
+
+4. Проверьте, что анимация экспортирована "Without Skin"
+
+## Архитектурные решения
+
+### Почему не ручные повороты костей?
+
+Ранее использовался подход с ручным поворотом костей скелета. Это оказалось ненадёжным:
+
+- Разные модели имеют разные системы координат
+
+- Иерархия костей может отличаться
+
+- Углы поворота работают непредсказуемо
+
+### Почему Mixamo анимации?
+
+- Mixamo — стандарт индустрии для humanoid анимаций
+
+- Бесплатно для коммерческого использования
+
+- Совместимо с Ready Player Me (оба используют Mixamo skeleton)
+
+- Профессиональное качество анимаций
+
+## Рекомендуемые анимации Mixamo
+
+| Анимация        | Использование         |
+| --------------- | --------------------- |
+| Sitting Idle    | Сотрудник за столом   |
+| Sitting Talking | Разговор на совещании |
+| Typing          | Работа за компьютером |
+| Walking         | Перемещение по офису  |
+| Standing Idle   | Ожидание              |
+
+## Будущие улучшения
+
+1. **Библиотека анимаций** — предзагруженные анимации для разных ситуаций
+
+2. **Переходы между анимациями** — плавные переходы при смене состояния
+
+3. **Lip sync** — синхронизация губ с аудио
+
+4. **Procedural animation** — процедурные движения головы и глаз
+
+## Ссылки
+
+- [Ready Player Me API](https://docs.readyplayer.me/ready-player-me/api-reference/rest-api/avatars/get-3d-avatars)
+
+- [Mixamo](https://www.mixamo.com)
+
+- [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/)
+
+- [Three.js Animation System](https://threejs.org/docs/#manual/en/introduction/Animation-system)
+

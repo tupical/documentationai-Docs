@@ -1,0 +1,91 @@
+---
+title: Cron Jobs Configuration
+description: >-
+  The system uses PostgreSQL's pg_cron extension to schedule automatic
+  notification processing and maintenance tasks.
+---
+## Active Cron Jobs
+
+### 1. `process-pending-notifications`
+
+- **Schedule**: Every minute (`* * * * *`)
+
+- **Purpose**: Processes pending notifications from `notification_queue` and sends them via configured channels (Pusher, Telegram).
+
+- **Command**: Calls `send-event-notifications` Edge Function.
+
+**Configuration SQL:**
+
+```sql
+SELECT cron.schedule(
+  'process-pending-notifications',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://supabase.vskideas.ru/functions/v1/send-event-notifications',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer [ANON_KEY]'
+    ),
+    body := jsonb_build_object('source', 'cron')
+  ) AS request_id;
+  $$
+);
+```
+
+### 2. `daily-celebrations` (Recommended)
+
+- **Schedule**: Daily at 09:00 UTC (`0 9 * * *`)
+
+- **Purpose**: Checks for birthdays and work anniversaries and queues notifications.
+
+- **Note**: Currently, this is often triggered via external cron (GitHub Actions) or needs to be set up in `pg_cron` to call the Edge Function with a specific flag or a separate endpoint.
+
+## Management
+
+### Check Active Jobs
+
+```sql
+SELECT * FROM cron.job;
+```
+
+### Check Job History
+
+```sql
+SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
+```
+
+### Unschedule a Job
+
+```sql
+SELECT cron.unschedule('process-pending-notifications');
+```
+
+## Troubleshooting
+
+### 1. Job Not Running
+
+- Check `cron.job` active status: `SELECT active FROM cron.job WHERE jobname = '...';`
+
+- Reactivate: `UPDATE cron.job SET active = true WHERE jobname = '...';`
+
+### 2. 401 Unauthorized
+
+- The `ANON_KEY` in the cron definition might be expired or invalid.
+
+- **Fix**: Reschedule the job with the current `ANON_KEY`.
+
+### 3. Function Timeout
+
+- If `send-event-notifications` times out (90s limit), reduce the batch size in the Edge Function logic or optimization SQL queries.
+
+## Scripts
+
+- `scripts/diagnose-cron.sql`: View current configuration and history.
+
+- `scripts/fix-cron-job.sql`: Re-apply the cron schedule with correct credentials.
+
+- `scripts/verify-cron-working.sql`: Comprehensive check.
+
+- `scripts/test-notifications.ps1`: Manually trigger the notification function.
+
